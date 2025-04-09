@@ -3,12 +3,20 @@ cmake_minimum_required(VERSION 3.10)
 # Project name and version
 project(gatherer VERSION 0.0.1 LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+# Add dependencies
+include(cmake/CPM.cmake)
+
+CPMAddPackage("gh:marzer/tomlplusplus#v3.4.0")
+
 # Add the executable
 file(GLOB_RECURSE SOURCES "src/*.cpp")
+
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Include directories (if any)
@@ -27,4 +35,3 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
 )
-
