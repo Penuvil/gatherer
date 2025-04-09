@@ -1,0 +1,5 @@
+#+title: The Gatherer
+#+author: Craig Tillbery
+
+* Description
+The Gatherer is a prototype application to test systems for a 2D RPG style game.
