@@ -6,13 +6,14 @@ project(gatherer VERSION 0.0.1 LANGUAGES CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Add dependencies
 include(cmake/CPM.cmake)
 
 CPMAddPackage("gh:marzer/tomlplusplus#v3.4.0")
+CPMAddPackage("gh:skypjack/entt#v3.15.0")
 
 # Add the executable
 file(GLOB_RECURSE SOURCES "src/*.cpp")
@@ -20,7 +21,9 @@ file(GLOB_RECURSE SOURCES "src/*.cpp")
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Include directories (if any)
-include_directories(${PROJECT_SOURCE_DIR}/src)
+include_directories(${PROJECT_SOURCE_DIR}/src
+                    ${tomlplusplus_SOURCE_DIR}
+                    ${entt_SOURCE_DIR}/src)
 
 # Set compiler-specific options (optional)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
