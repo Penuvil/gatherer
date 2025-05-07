@@ -137,7 +137,7 @@ void on_physics_event(const PhysicsEvent &event) {
   printf("Received PhysicsEvent: delta_timne = %f\n", event.delta_time);
 }
 
-int main() {
+int main(int argc, char **argv) {
   gatherer::Context ctx = {};
   init(ctx);
   printf("Hello world!\n");
