@@ -1,17 +1,18 @@
 #include <atomic>
-#include <condition_variable>
-#include <functional>
 #include <queue>
 #include <thread>
 
-#include "toml.hpp"
+#include "SDL3/SDL.h"
+#include "SDL3/SDL_main.h"
 #include "entt/entt.hpp"
+#include "toml.hpp"
+#include <SDL3/SDL_mutex.h>
 
 namespace gatherer {
 
 template <typename T>
 concept AtomicCompatible =
-  std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>;
+    std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>;
 
 template <AtomicCompatible T> class LightFuture {
 public:
@@ -31,9 +32,7 @@ public:
     return this->m_result.load(std::memory_order_acquire);
   }
 
-  inline bool poll() {
-    return this->m_ready.load(std::memory_order_acquire);
-  }
+  inline bool poll() { return this->m_ready.load(std::memory_order_acquire); }
 
 private:
   std::atomic<T> m_result;
@@ -42,13 +41,9 @@ private:
 
 template <typename T> class LightPromise {
 public:
-  inline LightFuture<T> *get_future() {
-    return &this->m_future;
-  }
+  inline LightFuture<T> *get_future() { return &this->m_future; }
 
-  inline void set_value(T value) {
-    m_future.set(value);
-  }
+  inline void set_value(T value) { m_future.set(value); }
 
 private:
   LightFuture<T> m_future;
@@ -57,59 +52,72 @@ private:
 struct Context {
   int width;
   int height;
+  SDL_Window *window;
 };
 
 void init(Context &ctx) {
+  SDL_Init(0);
   auto config = toml::parse_file("resources/config.toml");
   ctx.width = config["window"]["width"].node()->as_integer()->get();
   ctx.height = config["window"]["height"].node()->as_integer()->get();
+  ctx.window = SDL_CreateWindow("Gatherer", ctx.width, ctx.height, 0);
 }
 
 struct ThreadPool {
   std::queue<std::function<void()>> tasks;
-  std::mutex queue_mutex;
-  std::condition_variable condition;
+  SDL_Mutex *queue_mutex;
+  SDL_Condition *condition;
   bool stop;
-  std::vector<std::thread> workers;
+  std::vector<SDL_Thread *> workers;
 
-  ThreadPool(size_t num_threads) : stop(false) {
+  ThreadPool(size_t num_threads)
+      : queue_mutex(SDL_CreateMutex()), condition(SDL_CreateCondition()),
+        stop(false) {
+    int worker(void *ptr);
     for (size_t i = 0; i < num_threads; i++) {
-      workers.emplace_back([this] {
-        while (true) {
-          std::function<void()> task;
-          {
-            std::unique_lock<std::mutex> lock(this->queue_mutex);
-            this->condition.wait(
-                lock, [this] { return this->stop || !this->tasks.empty(); });
-            if (this->stop && this->tasks.empty())
-              return;
-            task = std::move(this->tasks.front());
-            this->tasks.pop();
-          }
-          task();
-        }
-      });
+      SDL_CreateThread(worker, "", (void *)this);
     }
   }
 
   ~ThreadPool() {
-    {
-      std::unique_lock<std::mutex> lock(queue_mutex);
-      stop = true;
+
+    SDL_LockMutex(queue_mutex);
+    stop = true;
+    SDL_UnlockMutex(queue_mutex);
+
+    SDL_BroadcastCondition(condition);
+    for (SDL_Thread *worker : workers) {
+      int status;
+      SDL_WaitThread(worker, &status);
     }
-    condition.notify_all();
-    for (std::thread &worker : workers) {
-      worker.join();
-    }
+    SDL_DestroyCondition(condition);
+    SDL_DestroyMutex(queue_mutex);
   }
 };
 
-void task_submit(ThreadPool &pool, std::function<void()> task) {
-  {
-    std::unique_lock<std::mutex> lock(pool.queue_mutex);
-    pool.tasks.push(task);
+int worker(void *ptr) {
+  auto data = (ThreadPool *)ptr;
+  while (true) {
+    std::function<void()> task;
+
+    SDL_LockMutex(data->queue_mutex);
+    SDL_WaitCondition(data->condition, data->queue_mutex);
+    if (data->stop && data->tasks.empty())
+      return 0;
+    task = std::move(data->tasks.front());
+    data->tasks.pop();
+    SDL_UnlockMutex(data->queue_mutex);
+
+    task();
   }
-  pool.condition.notify_one();
+}
+
+void task_submit(ThreadPool &pool, std::function<void()> task) {
+
+  SDL_LockMutex(pool.queue_mutex);
+  pool.tasks.push(task);
+  SDL_UnlockMutex(pool.queue_mutex);
+  SDL_SignalCondition(pool.condition);
 }
 } // namespace gatherer
 
@@ -130,6 +138,11 @@ void on_physics_event(const PhysicsEvent &event) {
 }
 
 int main() {
+  gatherer::Context ctx = {};
+  init(ctx);
+  printf("Hello world!\n");
+  printf("Window: Width: %d, Height: %d\n", ctx.width, ctx.height);
+
   auto pool = gatherer::ThreadPool(4);
   entt::dispatcher dispatcher;
 
@@ -141,44 +154,44 @@ int main() {
 
   gatherer::task_submit(pool, [&promise, &dispatcher] {
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::ostringstream oss;
-    oss << std::this_thread::get_id();
     promise.set_value(42);
     dispatcher.enqueue<InputEvent>(InputEvent{65});
     dispatcher.enqueue<PhysicsEvent>(PhysicsEvent{0.016f});
-    printf("Task 1 executed on thread %s\n", oss.str().c_str());
+    printf("Task 1 executed on thread %lu\n", SDL_GetCurrentThreadID());
   });
 
   gatherer::task_submit(pool, [&dispatcher] {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    std::ostringstream oss;
-    oss << std::this_thread::get_id();
     dispatcher.enqueue<InputEvent>(InputEvent{66});
-    printf("Task 2 executed on thread %s\n", oss.str().c_str());
+    printf("Task 2 executed on thread %lu\n", SDL_GetCurrentThreadID());
   });
 
   bool running = true;
-  int frame_count = 0;
-  while(running) {
+  while (running) {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+      switch (event.type) {
+      case SDL_EVENT_KEY_DOWN:
+        switch (event.key.key) {
+        case SDLK_Q:
+          running = false;
+          break;
+        default:
+          break;
+        }
+        break;
+      default:
+        break;
+      }
+    }
 
     dispatcher.update();
 
-//    printf("Main loop frame %i\n", frame_count++);
-    frame_count++;
     std::this_thread::sleep_for(std::chrono::milliseconds(16));
-
-    if (frame_count > 100) {
-      running = false;
-    }
   }
   int result = future->get();
 
   printf("Promise result: %i\n", result);
-
-  gatherer::Context ctx = {};
-  init(ctx);
-  printf("Hello world!\n");
-  printf("Window: Width: %d, Height: %d\n", ctx.width, ctx.height);
-
+  SDL_DestroyWindow(ctx.window);
   return EXIT_SUCCESS;
 }
