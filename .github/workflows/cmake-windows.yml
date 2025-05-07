@@ -24,9 +24,6 @@ jobs:
       uses: Cyberboss/install-winget@v1
       with:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Update WinGet
-      run: winget upgrade winget --accept-package-agreements --accept-source-agreements --disable-interactivity
         
     - uses: actions/checkout@v4
 
