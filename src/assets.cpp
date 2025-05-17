@@ -57,9 +57,9 @@ public:
         auto file_stem = file.path().stem().string();
         if (file_stem == name) {
           std::cout << "Found File: " << file.path() << std::endl;
-          auto image = IMG_Load(file.path().c_str());
+          auto image = IMG_Load(reinterpret_cast<const char*>(file.path().c_str()));
           if (image == NULL) {
-            SDL_LogError(0, "Unable to load image %s", file.path().c_str());
+            SDL_LogError(0, "Unable to load image %s", reinterpret_cast<const char*>(file.path().c_str()));
           }
 
           texture.width = image->w;
