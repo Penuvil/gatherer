@@ -22,10 +22,15 @@ CPMAddPackage("gh:skypjack/entt#v3.15.0")
 CPMAddPackage("gh:libsdl-org/SDL#release-3.2.10")
 list(APPEND LIBS SDL3::SDL3)
 
+# SDL_Image
+set(SDLIMAGE_AVIF OFF CACHE BOOL "" FORCE)
+CPMAddPackage("gh:libsdl-org/SDL_Image#release-3.2.4")
+list(APPEND LIBS SDL3_image::SDL3_image)
+
 # Add the executable
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+add_executable(${PROJECT_NAME} "src/main.cpp")
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBS})
 
