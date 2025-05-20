@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(LIBS)
@@ -19,7 +19,7 @@ CPMAddPackage("gh:marzer/tomlplusplus#v3.4.0")
 CPMAddPackage("gh:skypjack/entt#v3.15.0")
 
 # SDL3
-CPMAddPackage("gh:libsdl-org/SDL#release-3.2.10")
+CPMAddPackage("gh:libsdl-org/SDL#release-3.2.14")
 list(APPEND LIBS SDL3::SDL3)
 
 # SDL_Image

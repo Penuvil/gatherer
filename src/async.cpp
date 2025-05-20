@@ -1,8 +1,14 @@
+#include <coroutine>
+#include <expected>
+
+#include <SDL3/SDL_thread.h>
 #include <atomic>
+#include <functional>
+#include <future>
 #include <queue>
 #include <thread>
-#include <functional>
 
+#include "gatherer.hpp"
 #include <SDL3/SDL_mutex.h>
 
 namespace gatherer {
@@ -11,7 +17,7 @@ template <typename T>
 concept AtomicCompatible =
     std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>;
 
-template <AtomicCompatible T> class LightFuture {
+template <typename T> class LightFuture {
 public:
   LightFuture() : m_result(), m_ready(false) {}
   ~LightFuture() = default;
@@ -74,31 +80,228 @@ struct ThreadPool {
       : queue_mutex(SDL_CreateMutex()), condition(SDL_CreateCondition()),
         stop(false) {
     for (size_t i = 0; i < num_threads; i++) {
-      SDL_CreateThread(worker, "", (void *)this);
+      auto thread = SDL_CreateThread(worker, "", (void *)this);
+      workers.push_back(thread);
+      SDL_DetachThread(thread);
     }
   }
 
   ~ThreadPool() {
-
     SDL_LockMutex(queue_mutex);
     stop = true;
     SDL_UnlockMutex(queue_mutex);
-
     SDL_BroadcastCondition(condition);
-    for (SDL_Thread *worker : workers) {
-      int status;
-      SDL_WaitThread(worker, &status);
-    }
     SDL_DestroyCondition(condition);
     SDL_DestroyMutex(queue_mutex);
   }
 };
 
-void task_submit(ThreadPool &pool, std::function<void()> task) {
+void task_submit(ThreadPool *pool, std::function<void()> task) {
 
-  SDL_LockMutex(pool.queue_mutex);
-  pool.tasks.push(task);
-  SDL_UnlockMutex(pool.queue_mutex);
-  SDL_SignalCondition(pool.condition);
+  SDL_LockMutex(pool->queue_mutex);
+  pool->tasks.push(task);
+  SDL_UnlockMutex(pool->queue_mutex);
+  SDL_SignalCondition(pool->condition);
 }
+
+template <typename T> struct Task {
+  struct promise_type;
+  using handle_type = std::coroutine_handle<promise_type>;
+
+  handle_type coro;
+
+  explicit Task(handle_type h) : coro(h) {}
+  Task(const Task &) = delete;
+  Task &operator=(const Task &) = delete;
+  Task(Task &&other) noexcept : coro(other.coro) { other.coro = nullptr; }
+  Task &operator=(Task &&other) noexcept {
+    if (this != &other) {
+      if (coro)
+        coro.destroy();
+      coro = other.coro;
+      other.coro = nullptr;
+    }
+    return *this;
+  }
+  ~Task() {
+    if (coro)
+      coro.destroy();
+  }
+
+  struct Awaiter {
+    handle_type coro;
+    bool await_ready() noexcept { return false; }
+    void await_suspend(std::coroutine_handle<> awaiting) noexcept {
+      coro.promise().continuation = awaiting;
+      coro.resume();
+    }
+    std::expected<T, std::string> await_resume() noexcept {
+      return coro.promise().result;
+    }
+  };
+
+  auto operator co_await() noexcept {
+    auto tmp = coro;
+    coro = nullptr;
+    return Awaiter{tmp};
+  }
+
+  struct promise_type {
+    std::expected<T, std::string> result;
+    std::coroutine_handle<> continuation = nullptr;
+
+    auto get_return_object() { return Task{handle_type::from_promise(*this)}; }
+    std::suspend_always initial_suspend() noexcept { return {}; }
+
+    struct FinalAwaiter {
+      bool await_ready() noexcept { return false; }
+      void await_suspend(handle_type handle) noexcept {
+        if (handle.promise().continuation)
+          handle.promise().continuation.resume();
+      }
+      void await_resume() noexcept {}
+    };
+    auto final_suspend() noexcept { return FinalAwaiter{}; }
+
+    template <typename U> void return_value(U &&value) noexcept {
+      result = std::expected<T, std::string>{std::forward<U>(value)};
+    }
+
+    void unhandled_exception() noexcept {
+      try {
+        throw;
+      } catch (const std::exception &e) {
+        result = std::unexpected(std::string(e.what()));
+      } catch (...) {
+        result = std::unexpected("unknown exception");
+      }
+    }
+  };
+};
+
+template <> struct Task<void> {
+  struct promise_type;
+  using handle_type = std::coroutine_handle<promise_type>;
+
+  handle_type coro;
+
+  explicit Task(handle_type h) : coro(h) {}
+  Task(const Task &) = delete;
+  Task &operator=(const Task &) = delete;
+  Task(Task &&other) noexcept : coro(other.coro) { other.coro = nullptr; }
+  Task &operator=(Task &&other) noexcept {
+    if (this != &other) {
+      if (coro)
+        coro.destroy();
+      coro = other.coro;
+      other.coro = nullptr;
+    }
+    return *this;
+  }
+  ~Task() {
+    if (coro)
+      coro.destroy();
+  }
+
+  struct Awaiter {
+    handle_type coro;
+    Context *ctx;
+    bool await_ready() noexcept { return false; }
+    void await_suspend(std::coroutine_handle<> awaiting) noexcept {
+      coro.promise().continuation = awaiting;
+      task_submit(ctx->pool, [h = coro]() { h.resume(); });
+    }
+    std::expected<void, std::string> await_resume() noexcept {
+      return coro.promise().result;
+    }
+  };
+
+  auto operator co_await() noexcept {
+    auto tmp = coro;
+    coro = nullptr;
+    return Awaiter{tmp, tmp.promise().ctx};
+  }
+
+  struct promise_type {
+    std::expected<void, std::string> result;
+    std::coroutine_handle<> continuation = nullptr;
+    Context *ctx;
+
+    promise_type(Context *ctx) : ctx(ctx) {}
+
+    auto get_return_object() { return Task{handle_type::from_promise(*this)}; }
+    std::suspend_always initial_suspend() noexcept { return {}; }
+
+    struct FinalAwaiter {
+      Context *ctx;
+      bool await_ready() noexcept { return false; }
+      void await_suspend(handle_type handle) noexcept {
+        if (handle.promise().continuation)
+          task_submit(ctx->pool, [cont = handle.promise().continuation]() {
+            cont.resume();
+          });
+      }
+      void await_resume() noexcept {}
+    };
+    auto final_suspend() noexcept { return FinalAwaiter{ctx}; }
+
+    void return_void() noexcept { result = std::expected<void, std::string>{}; }
+
+    void unhandled_exception() noexcept {
+      try {
+        throw;
+      } catch (const std::exception &e) {
+        result = std::unexpected(std::string(e.what()));
+      } catch (...) {
+        result = std::unexpected("unknown exception");
+      }
+    }
+  };
+};
+
+struct ResumeOnThreadPool {
+  ThreadPool *pool;
+  ResumeOnThreadPool(ThreadPool *pool) : pool(pool) {}
+  bool await_ready() const noexcept { return false; }
+  void await_suspend(std::coroutine_handle<> h) {
+    task_submit(pool, [h]() { h.resume(); });
+  }
+  void await_resume() const noexcept {}
+};
+
+ struct FutureAwaitable {
+   std::future<void> &fut;
+   bool await_ready() const noexcept {
+     return fut.wait_for(std::chrono::seconds(0)) ==
+     std::future_status::ready;
+   }
+   void await_suspend(std::coroutine_handle<> handle) {
+     fut.wait();
+     handle.resume();
+   }
+   void await_resume() const noexcept {}
+ };
+
+// Task<void> wrap_task(Task<void> task, std::atomic<int> &counter,
+//                      std::promise<void> &join_promise) {
+//   auto result = co_await task;
+//   if(--counter == 0)
+//     join_promise.set_value();
+//   co_return;
+// }
+//
+//   Task<void> wait_all(std::vector<Task<void>> tasks) {
+//     std::atomic<int> counter(tasks.size());
+//     std::promise<void> join_promise;
+//     auto join_future = join_promise.get_future();
+//
+//     for (auto &task : tasks) {
+//       auto wrapper = wrap_task(std::move(task), counter, join_promise);
+//       wrapper.coro.resume();
+//     }
+//
+//     FutureAwaitable join_awaitable{join_future};
+//     co_await join_awaitable;
+//     co_return;
+//   }
 } // namespace gatherer
