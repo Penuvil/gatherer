@@ -1,17 +1,14 @@
 #include "entt/signal/fwd.hpp"
 #include <SDL3/SDL_init.h>
-#include <coroutine>
-#include <expected>
-#include <string>
 
 #define SDL_MAIN_USE_CALLBACKS 1
 #include "SDL3/SDL_main.h"
 #include "entt/entt.hpp"
 #include "toml.hpp"
 
-#include "gatherer.hpp"
 #include "assets.cpp"
 #include "async.cpp"
+#include "gatherer.hpp"
 #include <SDL3/SDL_gpu.h>
 
 struct InputEvent {
@@ -35,8 +32,8 @@ struct ErrorInfo {
 
 Task<void> input_system(Context *ctx) {
   printf("input Update Started\n");
-  //co_await ResumeOnThreadPool{ctx->pool};
-  //co_await std::suspend_never{};
+  // co_await ResumeOnThreadPool{ctx->pool};
+  // co_await std::suspend_never{};
   ctx->dispatcher->enqueue<InputEvent>(InputEvent{65});
   ctx->dispatcher->enqueue<InputEvent>(InputEvent{66});
   printf("input Update completed\n");
@@ -44,9 +41,10 @@ Task<void> input_system(Context *ctx) {
 }
 
 Task<void> ai_system(Context *ctx) {
+  (void)ctx;
   // co_await ResumeOnThreadPool{ctx->pool};
   printf("AI Update Started\n");
-  //co_await std::suspend_never{};
+  // co_await std::suspend_never{};
   printf("AI Update completed\n");
   co_return;
 }
@@ -57,7 +55,7 @@ Task<void> physics_system(Context *ctx) {
   tasks.push_back(ai_system(ctx));
   co_await input_system(ctx);
   co_await ai_system(ctx);
-  //co_await wait_all(std::move(tasks));
+  // co_await wait_all(std::move(tasks));
   printf("Physics Update\n");
 
   co_return;
@@ -132,9 +130,11 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
     default:
       break;
     }
+    break;
   default:
     return SDL_APP_CONTINUE;
   }
+  return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppIterate(void *appstate) {
@@ -153,6 +153,7 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
 }
 
 void SDL_AppQuit(void *appstate, SDL_AppResult result) {
+  (void)result;
   SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
               "Gatherer application shutting down!\n");
   gatherer::Context *ctx = static_cast<gatherer::Context *>(appstate);

@@ -271,6 +271,7 @@ struct ResumeOnThreadPool {
 
  struct FutureAwaitable {
    std::future<void> &fut;
+   Context *ctx;
    bool await_ready() const noexcept {
      return fut.wait_for(std::chrono::seconds(0)) ==
      std::future_status::ready;
@@ -282,8 +283,7 @@ struct ResumeOnThreadPool {
    void await_resume() const noexcept {}
  };
 
-// Task<void> wrap_task(Task<void> task, std::atomic<int> &counter,
-//                      std::promise<void> &join_promise) {
+// Task<void> wrap_task(Task<void> task, std::atomic<int> &counter, std::promise<void> &join_promise) {
 //   auto result = co_await task;
 //   if(--counter == 0)
 //     join_promise.set_value();

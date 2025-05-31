@@ -17,8 +17,6 @@ struct Context {
   int width;
   int height;
 };
-}
-
-
+} // namespace gatherer
 
 #endif // GATHERER_H_
