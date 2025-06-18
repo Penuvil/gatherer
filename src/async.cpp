@@ -269,39 +269,16 @@ struct ResumeOnThreadPool {
   void await_resume() const noexcept {}
 };
 
- struct FutureAwaitable {
-   std::future<void> &fut;
-   Context *ctx;
-   bool await_ready() const noexcept {
-     return fut.wait_for(std::chrono::seconds(0)) ==
-     std::future_status::ready;
-   }
-   void await_suspend(std::coroutine_handle<> handle) {
-     fut.wait();
-     handle.resume();
-   }
-   void await_resume() const noexcept {}
- };
-
-// Task<void> wrap_task(Task<void> task, std::atomic<int> &counter, std::promise<void> &join_promise) {
-//   auto result = co_await task;
-//   if(--counter == 0)
-//     join_promise.set_value();
-//   co_return;
-// }
-//
-//   Task<void> wait_all(std::vector<Task<void>> tasks) {
-//     std::atomic<int> counter(tasks.size());
-//     std::promise<void> join_promise;
-//     auto join_future = join_promise.get_future();
-//
-//     for (auto &task : tasks) {
-//       auto wrapper = wrap_task(std::move(task), counter, join_promise);
-//       wrapper.coro.resume();
-//     }
-//
-//     FutureAwaitable join_awaitable{join_future};
-//     co_await join_awaitable;
-//     co_return;
-//   }
+struct FutureAwaitable {
+  std::future<void> &fut;
+  Context *ctx;
+  bool await_ready() const noexcept {
+    return fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+  }
+  void await_suspend(std::coroutine_handle<> handle) {
+    fut.wait();
+    handle.resume();
+  }
+  void await_resume() const noexcept {}
+};
 } // namespace gatherer

@@ -5,7 +5,7 @@
 #include "entt/entt.hpp"
 
 namespace gatherer {
-struct AssetManager;
+class AssetManager;
 struct ThreadPool;
 
 struct Context {
