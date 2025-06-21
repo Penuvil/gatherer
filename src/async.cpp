@@ -258,27 +258,4 @@ template <> struct Task<void> {
     }
   };
 };
-
-struct ResumeOnThreadPool {
-  ThreadPool *pool;
-  ResumeOnThreadPool(ThreadPool *pool) : pool(pool) {}
-  bool await_ready() const noexcept { return false; }
-  void await_suspend(std::coroutine_handle<> h) {
-    task_submit(pool, [h]() { h.resume(); });
-  }
-  void await_resume() const noexcept {}
-};
-
-struct FutureAwaitable {
-  std::future<void> &fut;
-  Context *ctx;
-  bool await_ready() const noexcept {
-    return fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-  }
-  void await_suspend(std::coroutine_handle<> handle) {
-    fut.wait();
-    handle.resume();
-  }
-  void await_resume() const noexcept {}
-};
 } // namespace gatherer
