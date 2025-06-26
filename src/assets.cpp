@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 
@@ -9,7 +10,7 @@
 #include "SDL3_image/SDL_image.h"
 namespace fs = std::filesystem;
 
-constexpr std::string ASSETS = "resources/";
+constexpr std::string_view ASSETS = "resources/";
 
 namespace gatherer {
 uint32_t comupte_checkusm(const char *data, size_t length) {
@@ -52,7 +53,7 @@ public:
     switch (type) {
     case AssetType::Texture: {
       auto texture = Texture{};
-      fs::path directory = ASSETS + "textures/";
+      fs::path directory = fs::path(ASSETS) / "textures/";
       for (const auto &file : fs::directory_iterator(directory)) {
         auto file_stem = file.path().stem().string();
         if (file_stem == name) {

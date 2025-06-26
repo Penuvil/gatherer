@@ -31,45 +31,46 @@ struct ErrorInfo {
 };
 
 Task<void> input_system(Context *ctx) {
-  printf("input Update Started\n");
-  // co_await ResumeOnThreadPool{ctx->pool};
-  // co_await std::suspend_never{};
   ctx->dispatcher->enqueue<InputEvent>(InputEvent{65});
   ctx->dispatcher->enqueue<InputEvent>(InputEvent{66});
-  printf("input Update completed\n");
   co_return;
 }
 
 Task<void> ai_system(Context *ctx) {
   (void)ctx;
-  // co_await ResumeOnThreadPool{ctx->pool};
-  printf("AI Update Started\n");
-  // co_await std::suspend_never{};
-  printf("AI Update completed\n");
   co_return;
 }
 
 Task<void> physics_system(Context *ctx) {
-  std::vector<Task<void>> tasks;
-  tasks.push_back(input_system(ctx));
-  tasks.push_back(ai_system(ctx));
-  co_await input_system(ctx);
-  co_await ai_system(ctx);
-  // co_await wait_all(std::move(tasks));
-  printf("Physics Update\n");
+  auto result = co_await input_system(ctx);
+  if (result) {
+  } else {
+    SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Error: %s", result.error().c_str());
+  }
+  result = co_await ai_system(ctx);
+  if (result) {
+  } else {
+    SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Error: %s", result.error().c_str());
+  }
 
   co_return;
 }
 
 Task<void> ui_system(Context *ctx) {
-  co_await physics_system(ctx);
-  printf("UI Update\n");
+  auto result = co_await physics_system(ctx);
+  if (result) {
+  } else {
+    SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Error: %s", result.error().c_str());
+  }
   co_return;
 }
 
 Task<void> game_update_system(Context *ctx) {
-  co_await ui_system(ctx);
-  printf("Game Update\n");
+  auto result = co_await ui_system(ctx);
+  if (result) {
+  } else {
+    SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Error: %s", result.error().c_str());
+  }
   co_return;
 }
 } // namespace gatherer
