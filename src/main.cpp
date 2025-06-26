@@ -42,9 +42,6 @@ Task<void> ai_system(Context *ctx) {
 }
 
 Task<void> physics_system(Context *ctx) {
-  std::vector<Task<void>> tasks;
-  tasks.push_back(input_system(ctx));
-  tasks.push_back(ai_system(ctx));
   auto result = co_await input_system(ctx);
   if (result) {
   } else {

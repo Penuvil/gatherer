@@ -53,8 +53,7 @@ public:
     switch (type) {
     case AssetType::Texture: {
       auto texture = Texture{};
-      std::string path(ASSETS);
-      fs::path directory = path + "textures/";
+      fs::path directory = fs::path(ASSETS) / "textures/";
       for (const auto &file : fs::directory_iterator(directory)) {
         auto file_stem = file.path().stem().string();
         if (file_stem == name) {
