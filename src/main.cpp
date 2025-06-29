@@ -1,27 +1,22 @@
-#include "entt/signal/fwd.hpp"
 #include <SDL3/SDL_init.h>
 
 #define SDL_MAIN_USE_CALLBACKS 1
 #include "SDL3/SDL_main.h"
-#include "entt/entt.hpp"
 #include "toml.hpp"
 
 #include "assets.cpp"
 #include "async.cpp"
+#include "events.cpp"
 #include "gatherer.hpp"
 #include <SDL3/SDL_gpu.h>
 
-struct InputEvent {
-  int key_code;
-};
+void on_input_event(void *raw, void *) {
+  auto *event = reinterpret_cast<gatherer::KeyPressedEvent *>(raw);
+}
 
-struct PhysicsEvent {
-  float delta_time;
-};
-
-void on_input_event(const InputEvent &event) { (void)event; }
-
-void on_physics_event(const PhysicsEvent &event) { (void)event; }
+void on_damage_event(void *raw, void *) {
+  auto *event = reinterpret_cast<gatherer::DamageEvent *>(raw);
+}
 
 namespace gatherer {
 enum class ErrorCode { SDLError };
@@ -31,8 +26,16 @@ struct ErrorInfo {
 };
 
 Task<void> input_system(Context *ctx) {
-  ctx->dispatcher->enqueue<InputEvent>(InputEvent{65});
-  ctx->dispatcher->enqueue<InputEvent>(InputEvent{66});
+  DamageEvent damage = DamageEvent(5, 10);
+  auto result = ctx->dispatcher->queue_event(&damage);
+  if (!result.has_value()) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", result.error().c_str());
+  }
+  KeyPressedEvent key_press = KeyPressedEvent(66);
+  result = ctx->dispatcher->queue_event(&key_press);
+  if (!result.has_value()) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", result.error().c_str());
+  }
   co_return;
 }
 
@@ -43,12 +46,12 @@ Task<void> ai_system(Context *ctx) {
 
 Task<void> physics_system(Context *ctx) {
   auto result = co_await input_system(ctx);
-  if (result) {
+  if (result.has_value()) {
   } else {
     SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Error: %s", result.error().c_str());
   }
   result = co_await ai_system(ctx);
-  if (result) {
+  if (result.has_value()) {
   } else {
     SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Error: %s", result.error().c_str());
   }
@@ -58,7 +61,7 @@ Task<void> physics_system(Context *ctx) {
 
 Task<void> ui_system(Context *ctx) {
   auto result = co_await physics_system(ctx);
-  if (result) {
+  if (result.has_value()) {
   } else {
     SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Error: %s", result.error().c_str());
   }
@@ -67,7 +70,7 @@ Task<void> ui_system(Context *ctx) {
 
 Task<void> game_update_system(Context *ctx) {
   auto result = co_await ui_system(ctx);
-  if (result) {
+  if (result.has_value()) {
   } else {
     SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Error: %s", result.error().c_str());
   }
@@ -102,7 +105,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 
   ctx->asset_manager = new gatherer::AssetManager;
   ctx->pool = new gatherer::ThreadPool(4);
-  ctx->dispatcher = new entt::dispatcher;
+  ctx->dispatcher = new gatherer::Dispatcher;
 
   if (!SDL_ClaimWindowForGPUDevice(ctx->device, ctx->window)) {
     SDL_LogError(SDL_LOG_CATEGORY_GPU, "%s\n", SDL_GetError());
@@ -111,8 +114,16 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
   SDL_LogInfo(SDL_LOG_CATEGORY_VIDEO, "Window: Width: %d, Height: %d\n",
               ctx->width, ctx->height);
 
-  ctx->dispatcher->sink<InputEvent>().connect<&on_input_event>();
-  ctx->dispatcher->sink<PhysicsEvent>().connect<&on_physics_event>();
+  auto result = ctx->dispatcher->subscribe(gatherer::EventType::KeyPressedEvent,
+                                           on_input_event, nullptr);
+  if (!result.has_value()) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", result.error().c_str());
+  }
+  result = ctx->dispatcher->subscribe(gatherer::EventType::DamageEvent,
+                                      on_damage_event, nullptr);
+  if (!result.has_value()) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", result.error().c_str());
+  }
 
   return SDL_APP_CONTINUE;
 }

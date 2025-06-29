@@ -4,7 +4,6 @@
 #include <SDL3/SDL_thread.h>
 #include <atomic>
 #include <functional>
-#include <future>
 #include <queue>
 #include <thread>
 

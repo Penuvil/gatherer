@@ -16,7 +16,6 @@ set(LIBS)
 include(cmake/CPM.cmake)
 
 CPMAddPackage("gh:marzer/tomlplusplus#v3.4.0")
-CPMAddPackage("gh:skypjack/entt#v3.15.0")
 
 # SDL3
 CPMAddPackage("gh:libsdl-org/SDL#release-3.2.14")
@@ -36,14 +35,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBS})
 
 # Include directories (if any)
 include_directories(${PROJECT_SOURCE_DIR}/src
-                    ${tomlplusplus_SOURCE_DIR}
-                    ${entt_SOURCE_DIR}/src)
+                    ${tomlplusplus_SOURCE_DIR})
 
 # Set compiler-specific options (optional)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(${PROJECT_NAME} PRIVATE /W4)
+  target_compile_options(${PROJECT_NAME} PRIVATE /W4)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -pedantic)
+  target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -pedantic)
 endif()
 
 # Output directories
