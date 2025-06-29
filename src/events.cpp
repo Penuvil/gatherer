@@ -76,13 +76,14 @@ public:
     size_t next_tail;
     while (true) {
       current_tail = tail.load(std::memory_order_relaxed);
-      next_tail = (tail + 1) % MaxQueued;
+      next_tail = (current_tail + 1) % MaxQueued;
 
       if (next_tail == head.load(std::memory_order_acquire))
         return std::unexpected("MaxQueued events exceeded");
       auto dest = queue_buffer[current_tail];
       auto src = reinterpret_cast<const uint8_t *>(event);
-      std::memcpy(dest, src, static_cast<size_t>(*(src + 1)));
+      auto header = reinterpret_cast<const EventHeader *>(src);
+      std::memcpy(dest, src, static_cast<size_t>(header->size));
       if (tail.compare_exchange_strong(current_tail, next_tail,
                                        std::memory_order_release)) {
         queued_count.fetch_add(1, std::memory_order_relaxed);
