@@ -1,8 +1,10 @@
 #include <SDL3/SDL_log.h>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <expected>
 #include <string>
+#include <thread>
 
 namespace gatherer {
 
@@ -70,23 +72,38 @@ public:
   }
 
   std::expected<void, std::string> queue_event(const void *event) {
-    if (queued_count >= MaxQueued)
-      return std::unexpected("ManQueued events exceeded");
-    auto dest = queue_buffer[tail];
-    auto src = reinterpret_cast<const uint8_t *>(event);
-    std::memcpy(dest, src, static_cast<size_t>(*(src + 1)));
-    tail = (tail + 1) % MaxQueued;
-    ++queued_count;
-    return std::expected<void, std::string>{};
+    size_t current_tail;
+    size_t next_tail;
+    while (true) {
+      current_tail = tail.load(std::memory_order_relaxed);
+      next_tail = (tail + 1) % MaxQueued;
+
+      if (next_tail == head.load(std::memory_order_acquire))
+        return std::unexpected("MaxQueued events exceeded");
+      auto dest = queue_buffer[current_tail];
+      auto src = reinterpret_cast<const uint8_t *>(event);
+      std::memcpy(dest, src, static_cast<size_t>(*(src + 1)));
+      if (tail.compare_exchange_strong(current_tail, next_tail,
+                                       std::memory_order_release)) {
+        queued_count.fetch_add(1, std::memory_order_relaxed);
+        return std::expected<void, std::string>{};
+      }
+
+      std::this_thread::yield();
+    }
   }
 
   void update() {
+    size_t current_head;
+    size_t next_head;
     while (queued_count > 0) {
-      auto slot = queue_buffer[head];
+      current_head = head.load(std::memory_order_relaxed);
+      next_head = (head + 1) % MaxQueued;
+      auto slot = queue_buffer[current_head];
       auto header = reinterpret_cast<EventHeader *>(slot);
       dispatch_to_listeners(header->type, slot);
-      head = (head + 1) % MaxQueued;
-      --queued_count;
+      head.store(next_head, std::memory_order_relaxed);
+      queued_count.fetch_sub(1, std::memory_order_relaxed);
     }
   }
 
@@ -96,9 +113,9 @@ private:
 
   //  alignas(alignof(max_align_t));
   uint8_t queue_buffer[MaxQueued][MaxEventBytes]{};
-  std::size_t head = 0;
-  std::size_t tail = 0;
-  std::size_t queued_count = 0;
+  std::atomic<std::size_t> head = 0;
+  std::atomic<std::size_t> tail = 0;
+  std::atomic<std::size_t> queued_count = 0;
 
   void dispatch_to_listeners(EventType type, void *event) {
     auto index = static_cast<size_t>(type);

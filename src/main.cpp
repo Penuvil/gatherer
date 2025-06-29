@@ -12,10 +12,14 @@
 
 void on_input_event(void *raw, void *) {
   auto *event = reinterpret_cast<gatherer::KeyPressedEvent *>(raw);
+  SDL_assert(event != nullptr);
+  SDL_assert(event->header.type == gatherer::EventType::KeyPressedEvent);
 }
 
 void on_damage_event(void *raw, void *) {
   auto *event = reinterpret_cast<gatherer::DamageEvent *>(raw);
+  SDL_assert(event != nullptr);
+  SDL_assert(event->header.type == gatherer::EventType::DamageEvent);
 }
 
 namespace gatherer {

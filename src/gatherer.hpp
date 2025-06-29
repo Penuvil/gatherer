@@ -1,7 +1,8 @@
 #ifndef GATHERER_H_
 #define GATHERER_H_
 
-#include "SDL3/SDL.h"
+#include <SDL3/SDL_gpu.h>
+#include <SDL3/SDL_video.h>
 
 namespace gatherer {
 class AssetManager;
